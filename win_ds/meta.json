@@ -1,0 +1,17 @@
+{
+  "T": 16,
+  "img_shape": [
+    64,
+    64,
+    64
+  ],
+  "classes": [
+    "Axcpt",
+    "Cuedts",
+    "Stern",
+    "Stroop"
+  ],
+  "total_windows": -2,
+  "dtype": "float32",
+  "has_subject_id": true
+}

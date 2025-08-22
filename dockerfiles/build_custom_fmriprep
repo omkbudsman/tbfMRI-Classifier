@@ -1,0 +1,103 @@
+# Stage 1: ANTs build
+FROM ubuntu:22.04 AS antsbuild
+
+RUN apt-get update && apt-get install -y \
+    cmake git g++ gcc libpng-dev zlib1g-dev \
+    libtiff-dev libexpat1-dev
+
+# Clone and build ANTs
+RUN git clone https://github.com/ANTsX/ANTs.git && \
+    cd ANTs && mkdir build && cd build && \
+    cmake -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=/opt/ants .. && \
+    make -j2 && \
+    mkdir -p /opt/ants/bin /opt/ants/lib && \
+    find . -type f -executable -exec cp {} /opt/ants/bin/ \; && \
+    find . -name "*.so*" -exec cp {} /opt/ants/lib/ \;
+
+# Stage 2: AFNI prebuilt
+FROM afni-debug AS afnibuild
+
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Core system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential git cmake curl ca-certificates wget unzip libpng-dev zlib1g-dev \
+    libexpat1-dev libfftw3-dev libdcmtk-dev libgomp1 libtbb-dev libeigen3-dev \
+    libxml2-dev python3 python3-pip python3-dev python3-setuptools python3-wheel \
+    gnupg2 dirmngr tcsh xorg gfortran libglu1-mesa libglw1-mesa libxm4 libjpeg-turbo8 \
+    libxft2 libxt6 libxpm4 libxext6 libxmu6 libxmu-headers libxi6 bc libatlas-base-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# FSL installation
+RUN curl -sSL https://fsl.fmrib.ox.ac.uk/fsldownloads/fslinstaller.py -o fslinstaller.py && \
+    yes | python3 fslinstaller.py -d /opt/fsl -V 6.0.6.5 && \
+    rm fslinstaller.py
+
+ENV FSLDIR=/opt/fsl
+ENV PATH="${FSLDIR}/bin:${PATH}"
+ENV FSLOUTPUTTYPE=NIFTI_GZ
+RUN echo "source $FSLDIR/etc/fslconf/fsl.sh" >> /etc/bash.bashrc
+
+# Pull AFNI binaries from the working afni-debug image
+COPY --from=afnibuild /opt/afni /opt/afni
+ENV PATH="/opt/afni:$PATH"
+
+# ANTs from antsbuild
+COPY --from=antsbuild /opt/ants /opt/ants
+ENV PATH="/opt/ants/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/ants/lib"
+
+# Neuroimaging Python packages
+RUN pip3 install --no-cache-dir nibabel nilearn numpy scipy matplotlib pandas
+
+# FreeSurfer dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 libxmu6 libxext6 libxt6 libglu1-mesa tcsh bc libjpeg-turbo8 && \
+    rm -rf /var/lib/apt/lists/*
+
+# FreeSurfer 7.4.1
+# ────────────────────────────────────────────────────────────────────────────────
+# Stage‑2: install FreeSurfer 7.4.1 from the tarball you pre‑downloaded
+# (replaces the old `curl | tar` line)
+# ────────────────────────────────────────────────────────────────────────────────
+
+# 1. Copy the tarball into the temporary layer
+COPY freesurfer_downloads/freesurfer-linux-ubuntu22_amd64-7.4.1.tar.gz /tmp/
+
+# 2. Extract and clean up
+RUN mkdir -p /opt/freesurfer-7.4.1 && \
+    tar -xzf /tmp/freesurfer-linux-ubuntu22_amd64-7.4.1.tar.gz \
+        -C /opt/freesurfer-7.4.1 --strip-components 1 && \
+    rm /tmp/freesurfer-linux-ubuntu22_amd64-7.4.1.tar.gz
+
+# ── FreeSurfer environment ────────────────────────────────────────────────────
+# FreeSurfer 7.4.1
+RUN mkdir -p /opt/freesurfer-7.4.1 && \
+    curl -fsSL https://surfer.nmr.mgh.harvard.edu/pub/dist/freesurfer/7.4.1/freesurfer-linux-ubuntu20_amd64-7.4.1.tar.gz | \
+    tar -xz -C /opt/freesurfer-7.4.1
+
+ENV FREESURFER_HOME=/opt/freesurfer-7.4.1/freesurfer
+ENV PATH="${FREESURFER_HOME}/bin:${PATH}"
+ENV FS_LICENSE=/opt/freesurfer/license.txt
+
+# Source SetUpFreeSurfer for every interactive shell
+RUN echo "source ${FREESURFER_HOME}/SetUpFreeSurfer.sh" >> /etc/bash.bashrc
+
+# C3D
+RUN curl -fsSL https://sourceforge.net/projects/c3d/files/c3d/1.0.0/c3d-1.0.0-Linux-x86_64.tar.gz/download | \
+    tar -xz -C /opt && \
+    ln -s /opt/c3d-1.0.0-Linux-x86_64/bin/* /usr/local/bin/
+RUN c3d_affine_tool --version || echo "Installed c3d_affine_tool"
+
+# fMRIPrep and sMRIPrep
+RUN pip install --upgrade pip setuptools wheel && \
+    pip install fmriprep==23.2.1 smriprep==0.13.2 traits==6.4.1
+
+RUN python3 -c "import fmriprep; print('fMRIPrep version:', fmriprep.__version__)"
+
+# Final PATH safety check
+ENV PATH="/opt/fsl/bin:/opt/ants/bin:/opt/afni:/opt/conda/bin:$PATH"
+
+CMD ["/bin/bash"]

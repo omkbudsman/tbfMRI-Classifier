@@ -1,0 +1,60 @@
+FROM ubuntu:22.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    curl \
+    tcsh \
+    libx11-dev libxt-dev libxext-dev libxmu-dev libxm4 libxpm-dev libxi-dev \
+    libglu1-mesa-dev libxft-dev libxrender-dev libgl1-mesa-dev libxrandr-dev \
+    libxinerama-dev libxfixes-dev libz-dev libexpat1-dev libgsl-dev libglib2.0-dev \
+    libmotif-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /afni
+
+# Clone AFNI repository and submodules
+RUN git clone https://github.com/afni/afni.git . && \
+    git config --global --add safe.directory /afni && \
+    git submodule update --init --recursive --depth=1
+
+RUN mkdir -p src/nifti && \
+    git clone https://github.com/NIFTI-Imaging/nifti_clib.git /tmp/nifti && \
+    cp -r /tmp/nifti/niftilib /afni/src/nifti/ && \
+    cp -r /tmp/nifti/nifticdf /afni/src/nifti/
+
+# Download your custom Makefiles
+RUN curl -fsSL -o Makefile.linux_ubuntu_22_64 https://raw.githubusercontent.com/omkbudsman/afni-makefiles/main/Makefile.linux_ubuntu_22_64 && \
+    curl -fsSL -o Makefile.INCLUDE https://raw.githubusercontent.com/omkbudsman/afni-makefiles/main/Makefile.INCLUDE
+
+# Create AFNI version header (before build)
+RUN echo "AFNI_OMK_CUSTOM_BUILD" > AFNI_version.txt && \
+    echo linux_ubuntu_22_64 >> AFNI_version.txt && \
+    date +'%b %d %Y' >> AFNI_version.txt && \
+    echo local >> AFNI_version.txt && \
+    cp AFNI_version.txt src/AFNI_version.txt && \
+    echo "#define AFNI_VERSION_LABEL \"AFNI_24.1.00\"" > src/AFNI_version.h && \
+    echo "#define AFNI_VERSION_PLATFORM \"linux_ubuntu_22_64\"" >> src/AFNI_version.h
+
+# Compile AFNI
+RUN cd src && \
+    make -j1 -f ../Makefile.linux_ubuntu_22_64 V=1 || (echo "❌ Build failed" && exit 1)
+
+# Manually compile critical AFNI programs
+RUN mkdir -p /opt/afni && \
+    cd src && \
+    make 3dAutomask -f ../Makefile.linux_ubuntu_22_64 V=1 && \
+    make 3dTshift -f ../Makefile.linux_ubuntu_22_64 V=1 && \
+    make 3dUnifize -f ../Makefile.linux_ubuntu_22_64 V=1 && \
+    cp 3dAutomask 3dTshift 3dUnifize /opt/afni/
+
+# Move built binaries (regardless of exact folder name) and link to /usr/local/bin
+# Move built binaries and link to /usr/local/bin
+RUN mkdir -p /opt/afni && \
+    find src -type f -executable -exec cp {} /opt/afni/ \; && \
+    ln -s /opt/afni/* /usr/local/bin
+
+# Add /opt/afni to PATH as backup
+ENV PATH="/opt/afni:$PATH"

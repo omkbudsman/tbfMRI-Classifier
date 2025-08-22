@@ -1,0 +1,83 @@
+# ─── Data & heavy artifacts (root only) ───────────────────────────────
+/freesurfer_downloads/
+/freesurfer_dummy/
+/BIDS_dataset/
+/ds003465/
+
+
+# Outputs & working dirs
+/outputs/
+/data/
+/cache/
+/fmriout/
+/fmriwork/
+
+
+# ─── Common Python Artifacts ───────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.ipynb_checkpoints
+
+# ─── TensorFlow / Keras Artifacts ──────────────────────────────────────
+*.h5
+*.keras
+*.ckpt
+*.ckpt.*
+*.pb
+*.tflite
+
+# ─── TensorBoard Logs ──────────────────────────────────────────────────
+/tb_logs/
+*.tfevents.*
+
+# ─── Arrays, pickles (global) ──────────────────────────────────────────
+*.npy
+*.pkl
+# (We explicitly un-ignored selected files in /win_ds above.)
+
+# ─── MRI / Neuroimaging files ──────────────────────────────────────────
+*.nii
+*.nii.gz
+*.mgz
+*.mgh
+
+# ─── Logs & temp files ─────────────────────────────────────────────────
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# ─── OS / Editor ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.code-workspace
+
+# ─── Environments / Build ──────────────────────────────────────────────
+.env
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+pip-wheel-metadata/
+
+# ─── Tool caches / Coverage ────────────────────────────────────────────
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Ignore contents of win_ds, but keep a few files
+/win_ds/*
+!/win_ds/meta.json
+!/win_ds/classes.npy
+!/win_ds/subjects.npy
+
+
+# Local scratch
+/misc/
