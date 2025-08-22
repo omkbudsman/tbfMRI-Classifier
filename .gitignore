@@ -81,3 +81,6 @@ htmlcov/
 
 # Local scratch
 /misc/
+
+# Windows shortcut
+fmriout.lnk
